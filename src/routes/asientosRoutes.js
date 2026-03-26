@@ -11,8 +11,8 @@ const asyncHandler = require('../utils/asyncHandler');
  */
 
 // URL de la API externa de asientos
-const EXTERNAL_SEAT_API = process.env.EXTERNAL_SEAT_API || 'https://apiconsumidorac.onrender.com';
-const PRICING_API = process.env.PRICING_API || 'https://apiconsumidorac.onrender.com';
+const EXTERNAL_SEAT_API = process.env.EXTERNAL_SEAT_API || 'https://apiconsumidorac.vercel.app';
+const PRICING_API = process.env.PRICING_API || 'https://apiconsumidorac.vercel.app';
 
 // Almacenamiento en memoria para holds (demo/fallback)
 const localHolds = new Map();
