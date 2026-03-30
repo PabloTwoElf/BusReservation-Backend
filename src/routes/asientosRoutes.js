@@ -133,7 +133,7 @@ router.get("/disponibles", asyncHandler(async (req, res) => {
   try {
     const response = await axios.get(`${EXTERNAL_SEAT_API}/disponibles`, {
       params: { rutaId, fecha },
-      timeout: 10000
+      timeout: 4000
     });
 
     return res.json({
@@ -165,7 +165,7 @@ router.get("/holds", asyncHandler(async (req, res) => {
 
   try {
     const response = await axios.get(`${EXTERNAL_SEAT_API}/holds`, {
-      timeout: 10000
+      timeout: 4000
     });
 
     return res.json({
@@ -220,7 +220,7 @@ router.post("/reservar", asyncHandler(async (req, res) => {
       fecha,
       asiento,
       userId: userId || clientId
-    }, { timeout: 10000 });
+    }, { timeout: 4000 });
 
     return res.json({
       ok: true,
@@ -265,7 +265,7 @@ router.delete("/holds", asyncHandler(async (req, res) => {
   try {
     const response = await axios.delete(`${EXTERNAL_SEAT_API}/holds`, {
       data: { holdId, rutaId, fecha, asiento },
-      timeout: 10000
+      timeout: 4000
     });
 
     if (rutaId && fecha && asiento) {
@@ -315,7 +315,7 @@ router.post("/reservar-definitivo", asyncHandler(async (req, res) => {
       rutaId,
       fecha,
       asiento
-    }, { timeout: 10000 });
+    }, { timeout: 4000 });
 
     const holdKey = `${rutaId}_${fecha}_${asiento}`;
     localHolds.delete(holdKey);
@@ -352,7 +352,7 @@ router.post("/calcular-precio", asyncHandler(async (req, res) => {
     try {
       const response = await axios.post(`${PRICING_API}/calcular-precio`, {
         cantidad: Number(cantidad)
-      }, { timeout: 15000 });
+      }, { timeout: 4000 });
 
       return res.json({ ok: true, ...response.data });
     } catch (error) {

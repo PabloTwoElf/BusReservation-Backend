@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(find \"D:\\\\EMPRESA PABLO\\\\CulturalTrip\\\\Backend\\\\BusReservation-Backend/src/services\" -name \"*.js\" -exec wc -l {} +)",
+      "Bash(find \"D:\\\\EMPRESA PABLO\\\\CulturalTrip\\\\Backend\\\\BusReservation-Backend/src/repositories\" -name \"*.js\" -exec wc -l {} +)",
+      "Bash(find \"D:\\\\EMPRESA PABLO\\\\CulturalTrip\\\\Backend\\\\BusReservation-Backend/src\" -type f -name \"*.js\" -exec wc -l {} +)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

@@ -1,6 +1,18 @@
 const express = require("express");
 const router = express.Router();
 
+// Helper: fetch con timeout de 4 segundos
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 /**
  * @swagger
  * tags:
@@ -59,8 +71,7 @@ router.get("/disponibles", async (req, res) => {
             rutaId
         )}&fecha=${encodeURIComponent(fecha)}`;
 
-        // Usar fetch nativo (Node 18+)
-        const r = await fetch(url);
+        const r = await fetchWithTimeout(url);
 
         // Propagar el status y el body
         const data = await r.json();
@@ -121,7 +132,7 @@ router.post("/reservar", async (req, res) => {
             return res.status(500).json({ ok: false, error: "SEAT_API_URL no configurado" });
         }
 
-        const r = await fetch(`${base}/api/asientos/reservar`, {
+        const r = await fetchWithTimeout(`${base}/api/asientos/reservar`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(req.body),
@@ -170,7 +181,7 @@ router.delete("/holds", async (req, res) => {
             return res.status(500).json({ ok: false, error: "SEAT_API_URL no configurado" });
         }
 
-        const r = await fetch(`${base}/api/asientos/holds`, {
+        const r = await fetchWithTimeout(`${base}/api/asientos/holds`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(req.body),
@@ -222,7 +233,7 @@ router.post("/reservar-definitivo", async (req, res) => {
             return res.status(500).json({ ok: false, error: "SEAT_API_URL no configurado" });
         }
 
-        const r = await fetch(`${base}/api/asientos/reservar-definitivo`, {
+        const r = await fetchWithTimeout(`${base}/api/asientos/reservar-definitivo`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(req.body),
@@ -254,7 +265,7 @@ router.get("/holds", async (req, res) => {
             return res.status(500).json({ ok: false, error: "SEAT_API_URL no configurado" });
         }
 
-        const r = await fetch(`${base}/api/asientos/holds`);
+        const r = await fetchWithTimeout(`${base}/api/asientos/holds`);
         const data = await r.json();
         return res.status(r.status).json(data);
     } catch (e) {

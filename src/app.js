@@ -3,6 +3,7 @@ const express = require('express');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 
 const connectDb = require('./config/db');
@@ -12,6 +13,8 @@ const { swaggerUi, swaggerSpec } = require('./config/swagger');
 const app = express();
 
 // Middlewares
+app.use(compression()); // Comprimir respuestas gzip
+
 // Configurar Helmet sin CSP para evitar bloqueos
 app.use(
   helmet({
