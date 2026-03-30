@@ -11,7 +11,7 @@ const asyncHandler = require('../utils/asyncHandler');
  *   description: Cálculo de precios usando lógica de descuentos de API externa pero precios locales
  */
 
-const PRICING_API = process.env.PRICING_API || 'https://apiconsumidorac.onrender.com';
+const PRICING_API = process.env.PRICING_API || 'https://apiconsumidorac.vercel.app';
 
 /**
  * POST /api/pricing/calcular-precio

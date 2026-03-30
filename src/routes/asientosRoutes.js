@@ -11,8 +11,8 @@ const asyncHandler = require('../utils/asyncHandler');
  */
 
 // URL de la API externa de asientos
-const EXTERNAL_SEAT_API = process.env.EXTERNAL_SEAT_API || 'https://apiconsumidorac.onrender.com';
-const PRICING_API = process.env.PRICING_API || 'https://apiconsumidorac.onrender.com';
+const EXTERNAL_SEAT_API = process.env.EXTERNAL_SEAT_API || 'https://apiconsumidorac.vercel.app';
+const PRICING_API = process.env.PRICING_API || 'https://apiconsumidorac.vercel.app';
 
 // Almacenamiento en memoria para holds (demo/fallback)
 const localHolds = new Map();
@@ -24,7 +24,6 @@ const HOLD_EXPIRY_MS = 5 * 60 * 1000; // 5 minutos
 function generateDefaultSeats(rutaId, fecha) {
   const available = [];
   for (let i = 1; i <= 40; i++) {
-    // Excluir asientos que están en hold local
     const holdKey = `${rutaId}_${fecha}_${i}`;
     if (!localHolds.has(holdKey)) {
       available.push(i);
@@ -49,6 +48,73 @@ function cleanupExpiredHolds() {
 setInterval(cleanupExpiredHolds, 30000);
 
 /**
+ * GET /api/asientos/view-model
+ * View Model completo del mapa de asientos para la interfaz visual.
+ * Reemplaza las llamadas paralelas a /disponibles + /holds.
+ */
+router.get("/view-model", asyncHandler(async (req, res) => {
+  const { rutaId, fecha, userId } = req.query;
+
+  if (!rutaId || !fecha) {
+    return res.status(400).json({ ok: false, error: "rutaId y fecha son requeridos" });
+  }
+
+  cleanupExpiredHolds();
+
+  try {
+    const response = await axios.get(`${EXTERNAL_SEAT_API}/view-model`, {
+      params: { rutaId, fecha, userId },
+      timeout: 10000,
+    });
+    return res.json({ ok: true, ...response.data });
+  } catch (error) {
+    console.log('[AsientosRoutes] view-model API no disponible, generando fallback local');
+
+    const available = generateDefaultSeats(rutaId, fecha);
+    const availableSet = new Set(available);
+    const now = Date.now();
+
+    const asientos = Array.from({ length: 40 }, (_, i) => {
+      const num = i + 1;
+      const holdKey = `${rutaId}_${fecha}_${num}`;
+      const hold = localHolds.get(holdKey);
+      let estado;
+      if (availableSet.has(num)) {
+        estado = 'disponible';
+      } else if (hold) {
+        estado = (userId && hold.userId === userId) ? 'miHold' : 'en_hold';
+      } else {
+        estado = 'ocupado';
+      }
+      return {
+        numero: num,
+        estado,
+        holdId: hold ? hold.holdId : null,
+        expiresAt: hold ? hold.expiresAt : null,
+        remainingMs: hold ? Math.max(0, new Date(hold.expiresAt).getTime() - now) : null,
+      };
+    });
+
+    return res.json({
+      ok: true,
+      rutaId,
+      fecha,
+      totalAsientos: 40,
+      asientos,
+      available,
+      total: available.length,
+      resumen: {
+        disponibles: available.length,
+        enHold: asientos.filter(a => a.estado === 'en_hold').length,
+        miHold: asientos.filter(a => a.estado === 'miHold').length,
+        ocupados: asientos.filter(a => a.estado === 'ocupado').length,
+      },
+      _isFallback: true,
+    });
+  }
+}));
+
+/**
  * GET /api/asientos/disponibles
  * Obtiene asientos disponibles para una ruta y fecha
  */
@@ -65,7 +131,6 @@ router.get("/disponibles", asyncHandler(async (req, res) => {
   cleanupExpiredHolds();
 
   try {
-    // Intentar llamar a API externa
     const response = await axios.get(`${EXTERNAL_SEAT_API}/disponibles`, {
       params: { rutaId, fecha },
       timeout: 10000
@@ -78,7 +143,6 @@ router.get("/disponibles", asyncHandler(async (req, res) => {
   } catch (error) {
     console.log('[AsientosRoutes] API externa no disponible, usando fallback local');
 
-    // Fallback: generar datos locales
     const available = generateDefaultSeats(rutaId, fecha);
 
     return res.json({
@@ -100,7 +164,6 @@ router.get("/holds", asyncHandler(async (req, res) => {
   cleanupExpiredHolds();
 
   try {
-    // Intentar llamar a API externa
     const response = await axios.get(`${EXTERNAL_SEAT_API}/holds`, {
       timeout: 10000
     });
@@ -112,7 +175,6 @@ router.get("/holds", asyncHandler(async (req, res) => {
   } catch (error) {
     console.log('[AsientosRoutes] API externa no disponible para holds, usando fallback local');
 
-    // Fallback: retornar holds locales
     const holds = Array.from(localHolds.values());
 
     return res.json({
@@ -142,7 +204,6 @@ router.post("/reservar", asyncHandler(async (req, res) => {
 
   const holdKey = `${rutaId}_${fecha}_${asiento}`;
 
-  // Verificar si ya existe un hold
   if (localHolds.has(holdKey)) {
     const existingHold = localHolds.get(holdKey);
     if (existingHold.userId !== (userId || clientId)) {
@@ -154,7 +215,6 @@ router.post("/reservar", asyncHandler(async (req, res) => {
   }
 
   try {
-    // Intentar llamar a API externa
     const response = await axios.post(`${EXTERNAL_SEAT_API}/reservar`, {
       rutaId,
       fecha,
@@ -169,7 +229,6 @@ router.post("/reservar", asyncHandler(async (req, res) => {
   } catch (error) {
     console.log('[AsientosRoutes] API externa no disponible para reservar, usando fallback local');
 
-    // Fallback: crear hold local
     const holdId = `hold_${Date.now()}_${asiento}`;
     const expiresAt = new Date(Date.now() + HOLD_EXPIRY_MS).toISOString();
 
@@ -204,13 +263,11 @@ router.delete("/holds", asyncHandler(async (req, res) => {
   cleanupExpiredHolds();
 
   try {
-    // Intentar llamar a API externa
     const response = await axios.delete(`${EXTERNAL_SEAT_API}/holds`, {
       data: { holdId, rutaId, fecha, asiento },
       timeout: 10000
     });
 
-    // También eliminar del almacenamiento local si existe
     if (rutaId && fecha && asiento) {
       const holdKey = `${rutaId}_${fecha}_${asiento}`;
       localHolds.delete(holdKey);
@@ -223,7 +280,6 @@ router.delete("/holds", asyncHandler(async (req, res) => {
   } catch (error) {
     console.log('[AsientosRoutes] API externa no disponible para delete, usando fallback local');
 
-    // Fallback: eliminar del almacenamiento local
     if (rutaId && fecha && asiento) {
       const holdKey = `${rutaId}_${fecha}_${asiento}`;
       localHolds.delete(holdKey);
@@ -254,7 +310,6 @@ router.post("/reservar-definitivo", asyncHandler(async (req, res) => {
   cleanupExpiredHolds();
 
   try {
-    // Intentar llamar a API externa
     const response = await axios.post(`${EXTERNAL_SEAT_API}/reservar-definitivo`, {
       holdId,
       rutaId,
@@ -262,7 +317,6 @@ router.post("/reservar-definitivo", asyncHandler(async (req, res) => {
       asiento
     }, { timeout: 10000 });
 
-    // Eliminar del almacenamiento local
     const holdKey = `${rutaId}_${fecha}_${asiento}`;
     localHolds.delete(holdKey);
 
@@ -273,7 +327,6 @@ router.post("/reservar-definitivo", asyncHandler(async (req, res) => {
   } catch (error) {
     console.log('[AsientosRoutes] API externa no disponible para confirmar, usando fallback local');
 
-    // Fallback: confirmar localmente
     const holdKey = `${rutaId}_${fecha}_${asiento}`;
     localHolds.delete(holdKey);
 
@@ -295,37 +348,23 @@ router.post("/reservar-definitivo", asyncHandler(async (req, res) => {
 router.post("/calcular-precio", asyncHandler(async (req, res) => {
   const { cantidad, rutaId, fecha, isHoliday } = req.body;
 
-  // Si viene cantidad, usar la API de pricing externa
   if (cantidad && cantidad > 0) {
     try {
-      console.log(`[AsientosRoutes] Llamando pricing API con cantidad: ${cantidad}`);
-
       const response = await axios.post(`${PRICING_API}/calcular-precio`, {
         cantidad: Number(cantidad)
       }, { timeout: 15000 });
 
-      console.log('[AsientosRoutes] Pricing API response:', response.data);
-
-      return res.json({
-        ok: true,
-        ...response.data
-      });
+      return res.json({ ok: true, ...response.data });
     } catch (error) {
-      console.error('[AsientosRoutes] Error llamando pricing API:', error.message);
-
-      // Fallback: cálculo local
       const precioUnitario = 50000;
       const subtotal = cantidad * precioUnitario;
-
       let porcentajeDescuento = 0;
       if (cantidad >= 5) porcentajeDescuento = 10;
       else if (cantidad >= 4) porcentajeDescuento = 10;
       else if (cantidad >= 3) porcentajeDescuento = 7;
       else if (cantidad >= 2) porcentajeDescuento = 5;
-
       const montoDescuento = Math.round(subtotal * (porcentajeDescuento / 100));
       const total = subtotal - montoDescuento;
-
       return res.json({
         ok: true,
         cantidad,
@@ -340,15 +379,10 @@ router.post("/calcular-precio", asyncHandler(async (req, res) => {
     }
   }
 
-  // Si no viene cantidad, usar rutaId y fecha (lógica anterior)
   if (!rutaId || !fecha) {
-    return res.status(400).json({
-      ok: false,
-      error: "cantidad o (rutaId y fecha) son requeridos"
-    });
+    return res.status(400).json({ ok: false, error: "cantidad o (rutaId y fecha) son requeridos" });
   }
 
-  // Fallback simple para rutaId/fecha
   return res.json({
     ok: true,
     precioBase: 50000,
